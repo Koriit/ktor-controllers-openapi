@@ -1,0 +1,56 @@
+= Ktor Controllers OpenApi
+
+Support for OpenApi3 in https://github.com/Koriit/ktor-controllers[ktor-controllers].
+
+The idea is to validate your OpenApi spec against your code instead of generating it from your code.
+
+== Example
+[source,kotlin]
+----
+install(Routing) {
+    val host = if (isLocal) "localhost:8080" else "my-awesome-host.com"
+    val scheme = if (isLocal) "http" else "https"
+    val openapi = javaClass.getResourceAsStream("/openapi.yaml").reader()
+
+    openApiController(openapi, "1.0", scheme, host, rootPath)
+    swaggerUIController()
+}
+----
+
+== Testing
+[source,kotlin]
+----
+val server = TestApplicationEngine(serverConfig())
+server.start()
+
+LOG.info("Analyzing Ktor server...")
+val analyzer = KtorOpenApiAnalyzer(
+        ktor = server.application,
+        basePaths = listOf("/api"),
+        defaultHeaders = listOf(HttpHeader(XRequestId)),
+        defaultErrorType = ApiError::class
+)
+
+val source = analyzer.analyze()
+
+LOG.info("Reading OpenApi spec...")
+val doc = OpenApiReader({}.javaClass.getResourceAsStream("/openapi.yaml")).load()
+
+LOG.info("Validating spec...")
+val errors = OpenApiMatcher().match(doc, source)
+
+if (errors.isNotEmpty()) {
+    LOG.info("Result of server analysis:\n{}", source)
+
+    errors.forEach {
+        LOG.error(it)
+    }
+
+    fail("There are ${errors.size} validation errors!")
+
+} else {
+    LOG.info("OK!")
+}
+
+server.stop(0L, 0L, TimeUnit.MILLISECONDS)
+----
