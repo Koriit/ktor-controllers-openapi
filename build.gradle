@@ -3,11 +3,13 @@
 /////////////
 
 plugins {
-    id 'org.jetbrains.kotlin.jvm' version '1.3.50'
+    id "org.jetbrains.kotlin.jvm" version "1.3.50"
     id "com.jfrog.bintray" version "1.8.4"
     id "java-library"
     id "maven-publish"
     id "jacoco"
+    id "org.jlleitschuh.gradle.ktlint" version "9.1.1"
+    id "io.gitlab.arturbosch.detekt" version "1.2.0"
 }
 
 //////////////////
@@ -32,15 +34,15 @@ dependencies {
     implementation "org.jetbrains.kotlin:kotlin-reflect"
 
     // KTOR
-    implementation 'koriit.kotlin:ktor-controllers:0.1'
+    implementation "koriit.kotlin:ktor-controllers:0.1"
     implementation "io.ktor:ktor-server-core:$ktorVersion"
-//    implementation "io.ktor:ktor-server-host-common:$ktorVersion"
 
-    // OpenApi
-    implementation 'koriit.kotlin:openapi-matcher:0.3'
+    // OpenAPI
+    implementation "koriit.kotlin:openapi-matcher:0.5.1"
 
     // TESTING
     testImplementation "org.junit.jupiter:junit-jupiter:5.5.0"
+    testImplementation "io.ktor:ktor-server-test-host:$ktorVersion"
 }
 
 /////////////
@@ -51,16 +53,21 @@ sourceCompatibility = 1.8
 targetCompatibility = 1.8
 
 compileKotlin {
+    dependsOn ktlintFormat
     kotlinOptions {
-        freeCompilerArgs = ['-Xjsr305=strict']
-        jvmTarget = '1.8'
+        freeCompilerArgs = ["-Xjsr305=strict"]
+        jvmTarget = "1.8"
     }
 }
 
 compileTestKotlin {
     kotlinOptions {
-        freeCompilerArgs = ['-Xjsr305=strict']
-        jvmTarget = '1.8'
+        freeCompilerArgs = [
+                "-Xjsr305=strict",
+                "-Xuse-experimental=io.ktor.util.KtorExperimentalAPI",
+                "-Xuse-experimental=kotlin.ExperimentalStdlibApi"
+        ]
+        jvmTarget = "1.8"
     }
 }
 
@@ -68,9 +75,18 @@ compileTestKotlin {
 // TEST //
 //////////
 
+ktlint {
+    verbose = true
+}
+
+detekt {
+    config = files("detekt.yml")
+    buildUponDefaultConfig = true
+}
+
 test {
     useJUnitPlatform {
-        excludeTags project.hasProperty('fast') ? "Slow" : "None"
+        excludeTags project.hasProperty("fast") ? "Slow" : "None"
     }
 }
 
@@ -86,12 +102,12 @@ test.finalizedBy(jacocoTestReport)
 
 task sourcesJar(type: Jar) {
     from sourceSets.main.allSource
-    archiveClassifier = 'sources'
+    archiveClassifier = "sources"
 }
 
 task javadocJar(type: Jar) {
     from javadoc
-    archiveClassifier = 'javadoc'
+    archiveClassifier = "javadoc"
 }
 
 publishing {
@@ -104,8 +120,8 @@ publishing {
             artifact sourcesJar
             artifact javadocJar
             pom {
-                name = 'Ktor Controllers OpenApi'
-                description = 'Support for OpenApi3 in ktor-controllers'
+                name = "Ktor Controllers OpenAPI"
+                description = "Support for OpenAPI3 in ktor-controllers"
                 url = "https://github.com/Koriit/ktor-controllers-openapi"
                 licenses {
                     license {
@@ -119,13 +135,13 @@ publishing {
 }
 
 bintray {
-    user = System.getProperty('bintray.user')
-    key = System.getProperty('bintray.key')
-    publications = ['bintrayMaven']
+    user = System.getProperty("bintray.user")
+    key = System.getProperty("bintray.key")
+    publications = ["bintrayMaven"]
 
     pkg {
-        repo = 'kotlin'
-        name = 'ktor-controllers-openapi'
+        repo = "kotlin"
+        name = "ktor-controllers-openapi"
         version {
             name = project.version
             released  = new Date()
@@ -141,4 +157,8 @@ task getVersion {
     doLast {
         print project.version
     }
+}
+
+task fmt {
+    dependsOn ktlintFormat
 }
