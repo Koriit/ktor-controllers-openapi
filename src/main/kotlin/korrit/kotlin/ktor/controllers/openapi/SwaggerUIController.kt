@@ -8,6 +8,11 @@ import io.ktor.response.respondRedirect
 import io.ktor.routing.Route
 import io.ktor.routing.get
 
+/**
+ * Serves Swagger UI under GET /swagger-ui.
+ *
+ * Also redirects /swagger-ui.html to /swagger-ui
+ */
 fun Route.swaggerUIController() {
     get("/swagger-ui.html") {
         call.respondRedirect("swagger-ui")

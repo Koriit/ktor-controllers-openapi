@@ -1,18 +1,28 @@
-= Ktor Controllers OpenApi
+= Ktor Controllers OpenAPI
 
-Support for OpenApi3 in https://github.com/Koriit/ktor-controllers[ktor-controllers].
+image:https://www.travis-ci.org/Koriit/ktor-controllers-openapi.svg?branch=master["Build Status", link="https://www.travis-ci.org/Koriit/ktor-controllers-openapi"]
+image:https://www.codefactor.io/repository/github/koriit/ktor-controllers-openapi/badge[CodeFactor,link=https://www.codefactor.io/repository/github/koriit/ktor-controllers-openapi]
+image:https://img.shields.io/badge/code%20style-%E2%9D%A4-FF4081.svg[ktlint,link=https://ktlint.github.io/]
 
-The idea is to validate your OpenApi spec against your code instead of generating it from your code.
+image:https://api.bintray.com/packages/koriit/kotlin/ktor-controllers-openapi/images/download.svg[Download, link=https://bintray.com/koriit/kotlin/ktor-controllers-openapi/_latestVersion]
+image:https://img.shields.io/github/license/koriit/ktor-controllers-openapi[GitHub]
+
+Support for OpenAPI3 in https://github.com/Koriit/ktor-controllers[ktor-controllers].
+
+The idea is to validate your OpenAPI spec against your code instead of generating it from your code.
+
+[WARNING]
+This library in *Work In Progress*. It doesn't support all *relevant* elements of OpenAPI specification like
+oauth, callback or encoding yet. However, all structural elements should be supported.
+
 
 == Example
 [source,kotlin]
 ----
 install(Routing) {
-    val host = if (isLocal) "localhost:8080" else "my-awesome-host.com"
-    val scheme = if (isLocal) "http" else "https"
-    val openapi = javaClass.getResourceAsStream("/openapi.yaml").reader()
+    val openapi = {}.javaClass.getResourceAsStream("/openapi.yaml").reader().readText()
 
-    openApiController(openapi, "1.0", scheme, host, rootPath)
+    openAPIController(openapi)
     swaggerUIController()
 }
 ----
@@ -24,7 +34,7 @@ val server = TestApplicationEngine(serverConfig())
 server.start()
 
 LOG.info("Analyzing Ktor server...")
-val analyzer = KtorOpenApiAnalyzer(
+val analyzer = KtorOpenAPIAnalyzer(
         ktor = server.application,
         basePaths = listOf("/api"),
         defaultHeaders = listOf(HttpHeader(XRequestId)),
@@ -32,12 +42,13 @@ val analyzer = KtorOpenApiAnalyzer(
 )
 
 val source = analyzer.analyze()
+server.stop(0L, 0L, TimeUnit.MILLISECONDS)
 
-LOG.info("Reading OpenApi spec...")
-val doc = OpenApiReader({}.javaClass.getResourceAsStream("/openapi.yaml")).load()
+LOG.info("Reading OpenAPI spec...")
+val doc = OpenAPIReader().load({}.javaClass.getResourceAsStream("/openapi.yaml"))
 
 LOG.info("Validating spec...")
-val errors = OpenApiMatcher().match(doc, source)
+val errors = OpenAPIMatcher().match(doc, source)
 
 if (errors.isNotEmpty()) {
     LOG.info("Result of server analysis:\n{}", source)
@@ -51,6 +62,4 @@ if (errors.isNotEmpty()) {
 } else {
     LOG.info("OK!")
 }
-
-server.stop(0L, 0L, TimeUnit.MILLISECONDS)
 ----
