@@ -18,9 +18,6 @@ plugins {
 
 repositories {
     jcenter()
-    maven {
-        url  "https://dl.bintray.com/koriit/kotlin/"
-    }
 }
 
 ext {
@@ -33,7 +30,7 @@ dependencies {
     implementation "org.jetbrains.kotlin:kotlin-reflect"
 
     // KTOR
-    implementation "koriit.kotlin:ktor-controllers:0.1"
+    implementation "koriit.kotlin:ktor-controllers:0.3"
     implementation "io.ktor:ktor-server-core:$ktorVersion"
 
     // OpenAPI
