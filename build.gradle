@@ -32,6 +32,7 @@ dependencies {
     // KTOR
     implementation "koriit.kotlin:ktor-controllers:0.3"
     implementation "io.ktor:ktor-server-core:$ktorVersion"
+    implementation "io.ktor:ktor-server-host-common:$ktorVersion"
 
     // OpenAPI
     compileOnly "koriit.kotlin:openapi-matcher:0.5.1"
