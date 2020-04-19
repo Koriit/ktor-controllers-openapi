@@ -11,14 +11,15 @@ import io.ktor.routing.routing
 import io.ktor.server.engine.applicationEngineEnvironment
 import io.ktor.server.testing.TestApplicationEngine
 import io.ktor.util.pipeline.PipelineContext
-import java.util.concurrent.TimeUnit
 import korrit.kotlin.ktor.controllers.EmptyBodyInput
 import korrit.kotlin.ktor.controllers.GET
 import korrit.kotlin.ktor.controllers.HttpHeader
 import korrit.kotlin.ktor.controllers.Input
+import korrit.kotlin.ktor.controllers.PATCH
 import korrit.kotlin.ktor.controllers.POST
 import korrit.kotlin.ktor.controllers.PUT
 import korrit.kotlin.ktor.controllers.errors
+import korrit.kotlin.ktor.controllers.patch.PatchOf
 import korrit.kotlin.ktor.controllers.path
 import korrit.kotlin.ktor.controllers.query
 import korrit.kotlin.ktor.controllers.responds
@@ -38,19 +39,24 @@ internal class KtorOpenAPIAnalyzerTest {
             val code: String
         )
 
+        class EntityPatch : PatchOf<Entity>() {
+            var id by patchOf(Entity::id, required = true)
+            var code by patchOf(Entity::code)
+        }
+
         data class EntitiesList(
             val entities: List<Entity>
         )
 
         data class Case(
-            val doc: String,
+            val expectedDoc: String,
             val route: Routing.() -> Unit
         )
 
-        listOf(
-            Case(
-                // <editor-fold defaultstate="collapsed" desc="doc = ...">
-                doc = """  
+        mapOf(
+            "query params with defaults" to Case(
+                // <editor-fold defaultstate="collapsed" desc="expectedDoc = ...">
+                expectedDoc = """  
                   /:
                     get:  
                       parameters:
@@ -104,9 +110,9 @@ internal class KtorOpenAPIAnalyzerTest {
                         .responds<EntitiesList>(OK)
                 }
             ),
-            Case(
-                // <editor-fold defaultstate="collapsed" desc="doc = ...">
-                doc = """  
+            "path param" to Case(
+                // <editor-fold defaultstate="collapsed" desc="expectedDoc = ...">
+                expectedDoc = """  
                   /{id}:
                     get:  
                       parameters:
@@ -147,9 +153,9 @@ internal class KtorOpenAPIAnalyzerTest {
                         .errors(HttpStatusCode.NotFound)
                 }
             ),
-            Case(
-                // <editor-fold defaultstate="collapsed" desc="doc = ...">
-                doc = """  
+            "path param name override" to Case(
+                // <editor-fold defaultstate="collapsed" desc="expectedDoc = ...">
+                expectedDoc = """  
                   /code={entityCode}:
                     get:  
                       parameters:
@@ -189,9 +195,9 @@ internal class KtorOpenAPIAnalyzerTest {
                         .errors(HttpStatusCode.NotFound)
                 }
             ),
-            Case(
-                // <editor-fold defaultstate="collapsed" desc="doc = ...">
-                doc = """  
+            "response with custom headers" to Case(
+                // <editor-fold defaultstate="collapsed" desc="expectedDoc = ...">
+                expectedDoc = """  
                   /:
                     post:
                       requestBody:
@@ -230,9 +236,9 @@ internal class KtorOpenAPIAnalyzerTest {
                         .errors(BadRequest)
                 }
             ),
-            Case(
-                // <editor-fold defaultstate="collapsed" desc="doc = ...">
-                doc = """  
+            "response with empty body" to Case(
+                // <editor-fold defaultstate="collapsed" desc="expectedDoc = ...">
+                expectedDoc = """  
                   /{id}:
                     put:
                       parameters:
@@ -274,6 +280,96 @@ internal class KtorOpenAPIAnalyzerTest {
                         .responds<Unit>(OK)
                         .errors(BadRequest)
                 }
+            ),
+            "request with patch body" to Case(
+                // <editor-fold defaultstate="collapsed" desc="expectedDoc = ...">
+                expectedDoc = """  
+                  /{id}:
+                    put:
+                      parameters:
+                        - name: id
+                          in: path
+                          required: true
+                          schema:  
+                            type: integer
+                            format: int64
+                      requestBody:
+                        required: true
+                        content:
+                          application/json:  
+                            schema:  
+                              title: EntityPatch
+                              type: object
+                              required: [id, code]
+                              properties:
+                                code:  
+                                  type: string
+                                id:  
+                                  type: integer
+                                  format: int64
+                      responses:
+                        "200":  
+                          description: OK
+                        "400":  
+                          description: Bad Request
+                          """.trimIndent(),
+                // </editor-fold>
+                route = {
+                    PUT("/{id}") {
+                        object : Input<EntityPatch>() {
+                            val id: Long by path()
+
+                            override suspend fun PipelineContext<Unit, ApplicationCall>.respond() = Unit
+                        }
+                    }
+                        .responds<Unit>(OK)
+                        .errors(BadRequest)
+                }
+            ),
+            "PATCH request with patch body" to Case(
+                // <editor-fold defaultstate="collapsed" desc="expectedDoc = ...">
+                expectedDoc = """  
+                  /{id}:
+                    patch:
+                      parameters:
+                        - name: id
+                          in: path
+                          required: true
+                          schema:  
+                            type: integer
+                            format: int64
+                      requestBody:
+                        required: true
+                        content:
+                          application/json:  
+                            schema:  
+                              title: EntityPatch
+                              type: object
+                              required: [id]
+                              properties:
+                                code:  
+                                  type: string
+                                id:  
+                                  type: integer
+                                  format: int64
+                      responses:
+                        "200":  
+                          description: OK
+                        "400":  
+                          description: Bad Request
+                          """.trimIndent(),
+                // </editor-fold>
+                route = {
+                    PATCH("/{id}") {
+                        object : Input<EntityPatch>() {
+                            val id: Long by path()
+
+                            override suspend fun PipelineContext<Unit, ApplicationCall>.respond() = Unit
+                        }
+                    }
+                        .responds<Unit>(OK)
+                        .errors(BadRequest)
+                }
             )
         ).testCases {
             val server = TestApplicationEngine(applicationEngineEnvironment {
@@ -292,13 +388,13 @@ internal class KtorOpenAPIAnalyzerTest {
                     """
                     |openapi: 3.0.2
                     |paths:
-                    |${doc.prependIndent("  ")}
+                    |${expectedDoc.prependIndent("  ")}
                     """.trimMargin().byteInputStream()
                 )
 
                 val errors = OpenAPIMatcher().match(doc, source)
 
-                server.stop(0L, 0L, TimeUnit.MILLISECONDS)
+                server.stop(0L, 0L)
 
                 if (errors.isNotEmpty()) {
                     errors.forEach { println(it) }

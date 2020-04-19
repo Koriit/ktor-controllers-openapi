@@ -3,6 +3,9 @@ package korrit.kotlin.ktor.controllers.openapi
 import io.ktor.application.Application
 import io.ktor.application.feature
 import io.ktor.http.ContentType
+import io.ktor.http.HttpMethod
+import io.ktor.http.HttpMethod.Companion.Patch
+import io.ktor.http.content.OutgoingContent.NoContent
 import io.ktor.routing.HttpMethodRouteSelector
 import io.ktor.routing.Route
 import io.ktor.routing.Routing
@@ -18,6 +21,10 @@ import korrit.kotlin.ktor.controllers.delegates.HeaderParamDelegate
 import korrit.kotlin.ktor.controllers.delegates.PathParamDelegate
 import korrit.kotlin.ktor.controllers.delegates.QueryParamDelegate
 import korrit.kotlin.ktor.controllers.openapi.exceptions.AnalysisException
+import korrit.kotlin.ktor.controllers.patch.AbstractPatchDelegate
+import korrit.kotlin.ktor.controllers.patch.PatchOf
+import korrit.kotlin.ktor.controllers.patch.RequiredNestedPatchDelegate
+import korrit.kotlin.ktor.controllers.patch.RequiredPatchDelegate
 import korrit.kotlin.openapi.model.Header
 import korrit.kotlin.openapi.model.MediaType
 import korrit.kotlin.openapi.model.OpenAPI
@@ -46,15 +53,15 @@ import kotlin.reflect.jvm.javaField
  *
  * This analyzer holds internal state and thus it is not thread safe(NTS).
  *
- * @param ktor application to analyze
- * @param basePaths filter found routes by provided base paths
- * @param defaultResponseHeaders headers always present in the response
- * @param defaultContentType implicit content type
- * @param defaultErrorType implicit type of error responses
+ * @property ktor application to analyze
+ * @property basePaths filter found routes by provided base paths
+ * @property defaultResponseHeaders headers always present in the response
+ * @property defaultContentType implicit content type
+ * @property defaultErrorType implicit type of error responses
  */
 @KtorExperimentalAPI
 @ExperimentalStdlibApi
-@Suppress("TooManyFunctions")
+@Suppress("TooManyFunctions") // all those functions are open to allow overriding
 open class KtorOpenAPIAnalyzer(
     val ktor: Application,
     val basePaths: List<String> = listOf(""),
@@ -63,7 +70,7 @@ open class KtorOpenAPIAnalyzer(
     val defaultErrorType: KClass<*> = Unit::class
 ) {
 
-    protected open var routes = mutableListOf<Path>()
+    protected open var routes = mutableMapOf<String, Path>()
 
     /**
      * Analyzes your Ktor application and returns OpenAPI object describing it.
@@ -73,10 +80,10 @@ open class KtorOpenAPIAnalyzer(
     @Suppress("TooGenericExceptionCaught") // Intended
     open fun analyze(): OpenAPI {
         try {
-            routes = mutableListOf()
+            routes = mutableMapOf()
             analyzeRoute(ktor.feature(Routing))
 
-            return OpenAPI(paths = routes, components = null)
+            return OpenAPI(paths = routes.values.toList(), components = null)
         } catch (e: AnalysisException) {
             throw e
         } catch (e: Exception) {
@@ -95,15 +102,21 @@ open class KtorOpenAPIAnalyzer(
                 return
             }
 
-            val pathObj = routes
-                .find { it.path == path }
-                ?: Path(path).also { routes.add(it) }
-
             val method = analyzeMethod(route)
             val (deprecated, parameters, requestBody) = analyzeInput(route)
             val responses = analyzeResponses(route, path)
 
-            pathObj.operations.add(Operation(method, responses, requestBody, if (parameters.isNullOrEmpty()) null else parameters, deprecated))
+            val operation = Operation(
+                method = method,
+                responses = responses,
+                requestBody = requestBody,
+                parameters = if (parameters.isNullOrEmpty()) null else parameters,
+                deprecated = deprecated
+            )
+
+            val operations = routes[path]?.operations ?: emptyList()
+
+            routes[path] = Path(path, operations + operation)
         } else {
             route.children.forEach {
                 analyzeRoute(it)
@@ -119,6 +132,8 @@ open class KtorOpenAPIAnalyzer(
         val inputProvider = route.attributes.getOrNull(InputKey) ?: return Triple(false, null, null)
         val input = inputProvider()
 
+        val httpMethod = HttpMethod.parse(analyzeMethod(route).toUpperCase())
+
         // deprecated
         val deprecated = input._deprecated
 
@@ -127,7 +142,7 @@ open class KtorOpenAPIAnalyzer(
         val bodyType = inputType.arguments[0].type!!
         val requestBody = if (bodyType.classifier !in listOf(Nothing::class, Unit::class)) {
             val contentType = input._contentType ?: defaultContentType
-            val schema = toSchema(contentType, bodyType)
+            val schema = toSchema(contentType, bodyType, httpMethod)
             val content = listOf(MediaType(contentType = contentType.toString(), schema = schema))
 
             RequestBody(content, input._bodyRequired)
@@ -150,28 +165,28 @@ open class KtorOpenAPIAnalyzer(
                 when (delegate) {
                     null -> null
                     is PathParamDelegate<*> -> Parameter(
-                        delegate.name,
-                        "path",
-                        delegate.required,
-                        isDeprecated,
-                        null,
-                        toSchema(prop.returnType, default = if (delegate.required) null else delegate.default)
+                        name = delegate.name,
+                        inside = "path",
+                        required = delegate.required,
+                        deprecated = isDeprecated,
+                        description = null,
+                        schema = toSchema(prop.returnType, httpMethod, default = if (!delegate.required) delegate.default else null)
                     )
                     is QueryParamDelegate<*> -> Parameter(
-                        delegate.name,
-                        "query",
-                        delegate.required,
-                        isDeprecated,
-                        null,
-                        toSchema(prop.returnType, default = if (delegate.required) null else delegate.default)
+                        name = delegate.name,
+                        inside = "query",
+                        required = delegate.required,
+                        deprecated = isDeprecated,
+                        description = null,
+                        schema = toSchema(prop.returnType, httpMethod, default = if (!delegate.required) delegate.default else null)
                     )
                     is HeaderParamDelegate<*> -> Parameter(
-                        delegate.name,
-                        "header",
-                        delegate.required,
-                        isDeprecated,
-                        null,
-                        toSchema(prop.returnType, default = if (delegate.required) null else delegate.default)
+                        name = delegate.name,
+                        inside = "header",
+                        required = delegate.required,
+                        deprecated = isDeprecated,
+                        description = null,
+                        schema = toSchema(prop.returnType, httpMethod, default = if (!delegate.required) delegate.default else null)
                     )
                     else -> throw AnalysisException("Unknown delegate in class ${input::class.qualifiedName}")
                 }
@@ -183,33 +198,36 @@ open class KtorOpenAPIAnalyzer(
     protected open fun analyzeResponses(route: Route, path: String): List<Response> {
         val responseTypes = route.attributes.getOrNull(ResponsesKey) ?: throw AnalysisException("There are no responses declared for path: $path")
 
-        return responseTypes.map {
+        val httpMethod = HttpMethod.parse(analyzeMethod(route).toUpperCase())
+
+        return responseTypes.map { response ->
             var content: List<MediaType>? = null
-            val responseBodyType = it.type ?: defaultErrorType
-            if (responseBodyType != Unit::class) {
-                val contentType = it.contentType ?: defaultContentType
-                val schema = toSchema(contentType, responseBodyType.createType()) // FIXME: pass type
+            val responseBodyType = response.type ?: defaultErrorType
+            if (responseBodyType != Unit::class && !responseBodyType.isSubclassOf(NoContent::class)) {
+                val contentType = response.contentType ?: defaultContentType
+                val schema = toSchema(contentType, responseBodyType.createType(), httpMethod) // FIXME: pass type
                 content = listOf(MediaType(contentType = contentType.toString(), schema = schema))
             }
-            val responseHeaders = defaultResponseHeaders + (it.headers ?: emptyList())
+            val responseHeaders = defaultResponseHeaders + (response.headers ?: emptyList())
             val headers = responseHeaders.map {
-                Header(it.name, it.required, it.deprecated, toSchema(it.type.createType()))
+                Header(it.name, it.required, it.deprecated, toSchema(it.type.createType(), httpMethod))
             }
 
-            Response(it.status.value.toString(), content, it.status.description, if (headers.isEmpty()) null else headers)
+            Response(response.status.value.toString(), content, response.status.description, if (headers.isEmpty()) null else headers)
         }
     }
 
-    protected open fun toSchema(contentType: ContentType, type: KType): Schema {
+    protected open fun toSchema(contentType: ContentType, type: KType, httpMethod: HttpMethod): Schema {
         return when (contentType) {
             ContentType.Text.Plain -> Schema(null, "string", false, false, null, null, null, null, null, null, null, null)
             ContentType.Application.OctetStream -> Schema(null, "string", false, false, "binary", null, null, null, null, null, null, null)
-            ContentType.Application.Json -> toSchema(type)
-            else -> throw AnalysisException("Cannot transform content type $contentType to OpenAPI Schema Object: unknown transformation")
+            ContentType.Application.Json -> toSchema(type, httpMethod)
+            // Might be more in the future
+            else -> throw AnalysisException("Cannot transform content type $contentType to OpenAPI Schema Object: no transformation")
         }
     }
 
-    protected open fun toSchema(type: KType, deprecated: Boolean = false, default: Any? = null): Schema {
+    protected open fun toSchema(type: KType, httpMethod: HttpMethod, deprecated: Boolean = false, default: Any? = null): Schema {
         assert(type.classifier is KClass<*>)
         val classifier = type.classifier as KClass<*>
         val nullable = type.isMarkedNullable
@@ -226,11 +244,11 @@ open class KtorOpenAPIAnalyzer(
             Byte::class -> return Schema(null, "string", deprecated, nullable, "binary", default, null, null, null, null, null, null)
 
             // Special arrays of primitives
-            IntArray::class -> return Schema(null, "array", deprecated, nullable, null, default, null, null, null, null, toSchema(Int::class.createType()), null)
-            LongArray::class -> return Schema(null, "array", deprecated, nullable, null, default, null, null, null, null, toSchema(Long::class.createType()), null)
-            FloatArray::class -> return Schema(null, "array", deprecated, nullable, null, default, null, null, null, null, toSchema(Float::class.createType()), null)
-            DoubleArray::class -> return Schema(null, "array", deprecated, nullable, null, default, null, null, null, null, toSchema(Double::class.createType()), null)
-            BooleanArray::class -> return Schema(null, "array", deprecated, nullable, null, default, null, null, null, null, toSchema(Boolean::class.createType()), null)
+            IntArray::class -> return Schema(null, "array", deprecated, nullable, null, default, null, null, null, null, toSchema(Int::class.createType(), httpMethod), null)
+            LongArray::class -> return Schema(null, "array", deprecated, nullable, null, default, null, null, null, null, toSchema(Long::class.createType(), httpMethod), null)
+            FloatArray::class -> return Schema(null, "array", deprecated, nullable, null, default, null, null, null, null, toSchema(Float::class.createType(), httpMethod), null)
+            DoubleArray::class -> return Schema(null, "array", deprecated, nullable, null, default, null, null, null, null, toSchema(Double::class.createType(), httpMethod), null)
+            BooleanArray::class -> return Schema(null, "array", deprecated, nullable, null, default, null, null, null, null, toSchema(Boolean::class.createType(), httpMethod), null)
 
             CharArray::class -> return Schema(null, "string", deprecated, nullable, null, default, null, null, null, null, null, null)
             ByteArray::class -> return Schema(null, "string", deprecated, nullable, "binary", default, null, null, null, null, null, null)
@@ -251,22 +269,22 @@ open class KtorOpenAPIAnalyzer(
 
         // Generic arrays
         if (classifier.java.isArray) {
-            return arrayToSchema(type, classifier, deprecated, nullable)
+            return arrayToSchema(type, classifier, httpMethod, deprecated, nullable)
         }
 
         // Lists
         if (classifier.isSubclassOf(List::class)) {
-            return listToSchema(type, deprecated, nullable)
+            return listToSchema(type, httpMethod, deprecated, nullable)
         }
 
         // Sets
         if (classifier.isSubclassOf(Set::class)) {
-            return setToSchema(type, deprecated, nullable)
+            return setToSchema(type, httpMethod, deprecated, nullable)
         }
 
         // Maps
         if (classifier.isSubclassOf(Map::class)) {
-            return mapToSchema(type, classifier, deprecated, nullable)
+            return mapToSchema(type, classifier, httpMethod, deprecated, nullable)
         }
 
         // Enums
@@ -275,34 +293,51 @@ open class KtorOpenAPIAnalyzer(
         }
 
         // Objects
-        return objectToSchema(classifier, deprecated, nullable)
+        return objectToSchema(classifier, deprecated, nullable, httpMethod)
     }
 
-    protected open fun objectToSchema(classifier: KClass<*>, deprecated: Boolean, nullable: Boolean): Schema {
+    // TODO: document it in detail
+    protected open fun objectToSchema(classifier: KClass<*>, deprecated: Boolean, nullable: Boolean, httpMethod: HttpMethod): Schema {
         val properties = classifier.memberProperties
             .asSequence()
             .filter { it.visibility == KVisibility.PUBLIC }
             .map {
                 val isDeprecated = it.hasAnnotation<Deprecated>() || it.hasAnnotation<java.lang.Deprecated>()
-                val schema = toSchema(it.returnType, deprecated = isDeprecated)
+                val schema = toSchema(it.returnType, httpMethod, deprecated = isDeprecated)
                 Property(it.name, schema)
             }
+            .sortedBy { it.name }
             .toList()
 
-        val constructorParams =
-            classifier.primaryConstructor?.parameters ?: throw AnalysisException("Cannot transform type ${classifier.simpleName} to OpenAPI Schema Object: missing primary constructor")
-        val required = constructorParams.asSequence()
+        val constructorParams = classifier.primaryConstructor?.parameters
+            ?: throw AnalysisException("Cannot transform type ${classifier.simpleName} to OpenAPI Schema Object: missing primary constructor")
+
+        val requiredProperties = constructorParams
+            .asSequence()
             .filter { param ->
                 properties.find { it.name == param.name }
                     ?: throw AnalysisException("Cannot transform type ${classifier.simpleName} to OpenAPI Schema Object: primary constructor param is not a public property: ${param.name}")
                 !param.isOptional
             }
-            .map {
-                it.name!!
-            }
-            .toList()
+            .map { it.name!! }
+            .toMutableList()
 
-        return Schema(classifier.simpleName, "object", deprecated, nullable, null, null, null, if (required.isNotEmpty()) required else null, properties, null, null, null)
+        if (PatchOf::class.java.isAssignableFrom(classifier.java)) {
+            requiredProperties += classifier.memberProperties
+                .asSequence()
+                .filter { it.javaField != null }
+                .filter { httpMethod != Patch || it.javaField!!.type in listOf(RequiredNestedPatchDelegate::class.java, RequiredPatchDelegate::class.java) }
+                .filter { param ->
+                    properties.find { it.name == param.name }
+                        ?: throw AnalysisException("Cannot transform type ${classifier.simpleName} to OpenAPI Schema Object: patch delegate is not a public property: ${param.name}")
+
+                    AbstractPatchDelegate::class.java.isAssignableFrom(param.javaField!!.type)
+                }
+                .map { it.name }
+                .toList()
+        }
+
+        return Schema(classifier.simpleName, "object", deprecated, nullable, null, null, null, if (requiredProperties.isNotEmpty()) requiredProperties.sorted() else null, properties, null, null, null)
     }
 
     protected open fun enumToSchema(classifier: KClass<*>, deprecated: Boolean, nullable: Boolean, default: Any? = null): Schema {
@@ -310,16 +345,16 @@ open class KtorOpenAPIAnalyzer(
         return Schema("${classifier.simpleName}Enum", "string", deprecated, nullable, null, default, null, null, null, null, null, values)
     }
 
-    protected open fun mapToSchema(type: KType, classifier: KClass<*>, deprecated: Boolean, nullable: Boolean): Schema {
+    protected open fun mapToSchema(type: KType, classifier: KClass<*>, httpMethod: HttpMethod, deprecated: Boolean, nullable: Boolean): Schema {
         val itemType = findMapValueType(type) ?: throw AnalysisException("Cannot find Map supertype with type arguments of: $type")
         val itemCls = itemType.classifier as KClass<*>
-        val itemSchema = if (itemCls != Any::class) toSchema(itemType) else null
+        val itemSchema = if (itemCls != Any::class) toSchema(itemType, httpMethod) else null
         val title = if (itemCls != Any::class) "${itemCls.simpleName}Map" else classifier.simpleName
 
         return Schema(title, "object", deprecated, nullable, null, null, null, null, null, itemSchema, null, null)
     }
 
-    protected open fun setToSchema(type: KType, deprecated: Boolean, nullable: Boolean): Schema {
+    protected open fun setToSchema(type: KType, httpMethod: HttpMethod, deprecated: Boolean, nullable: Boolean): Schema {
         val setType = findSuperType(type, AbstractSet::class)
             ?: findSuperType(type, java.util.AbstractSet::class)
             ?: findSuperType(type, Set::class)
@@ -328,10 +363,10 @@ open class KtorOpenAPIAnalyzer(
         val itemType = setType.arguments[0].type!!
         val itemCls = itemType.classifier as KClass<*>
 
-        return Schema("${itemCls.simpleName}Set", "array", deprecated, nullable, null, null, true, null, null, null, toSchema(itemType), null)
+        return Schema("${itemCls.simpleName}Set", "array", deprecated, nullable, null, null, true, null, null, null, toSchema(itemType, httpMethod), null)
     }
 
-    protected open fun listToSchema(type: KType, deprecated: Boolean, nullable: Boolean): Schema {
+    protected open fun listToSchema(type: KType, httpMethod: HttpMethod, deprecated: Boolean, nullable: Boolean): Schema {
         val listType = findSuperType(type, AbstractList::class)
             ?: findSuperType(type, java.util.AbstractList::class)
             ?: findSuperType(type, List::class)
@@ -341,15 +376,15 @@ open class KtorOpenAPIAnalyzer(
         val itemType = listType.arguments[0].type!!
         val itemCls = itemType.classifier as KClass<*>
 
-        return Schema("${itemCls.simpleName}List", "array", deprecated, nullable, null, null, null, null, null, null, toSchema(itemType), null)
+        return Schema("${itemCls.simpleName}List", "array", deprecated, nullable, null, null, null, null, null, null, toSchema(itemType, httpMethod), null)
     }
 
-    protected open fun arrayToSchema(type: KType, classifier: KClass<*>, deprecated: Boolean, nullable: Boolean): Schema {
+    protected open fun arrayToSchema(type: KType, classifier: KClass<*>, httpMethod: HttpMethod, deprecated: Boolean, nullable: Boolean): Schema {
         if (type.arguments.isNotEmpty()) {
             val itemType = type.arguments[0].type!!
             val itemCls = itemType.classifier as KClass<*>
 
-            return Schema("${itemCls.simpleName}Array", "array", deprecated, nullable, null, null, null, null, null, null, toSchema(itemType), null)
+            return Schema("${itemCls.simpleName}Array", "array", deprecated, nullable, null, null, null, null, null, null, toSchema(itemType, httpMethod), null)
         } else {
             throw AnalysisException("Cannot transform array ${classifier.simpleName} to OpenAPI Schema Object: unknown transformation")
         }
