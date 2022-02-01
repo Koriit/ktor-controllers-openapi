@@ -1,4 +1,4 @@
-package korrit.kotlin.ktor.controllers.openapi
+package com.korrit.kotlin.ktor.controllers.openapi
 
 internal fun <T> List<T>.testCases(test: T.() -> Unit) {
     withIndex().forEach { (index, case) ->

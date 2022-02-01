@@ -1,4 +1,4 @@
-package korrit.kotlin.ktor.controllers.openapi.exceptions
+package com.korrit.kotlin.ktor.controllers.openapi.exceptions
 
 /**
  * General analysis exception.

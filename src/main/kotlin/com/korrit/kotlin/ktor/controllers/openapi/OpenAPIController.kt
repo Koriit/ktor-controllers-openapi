@@ -1,4 +1,4 @@
-package korrit.kotlin.ktor.controllers.openapi
+package com.korrit.kotlin.ktor.controllers.openapi
 
 import io.ktor.application.call
 import io.ktor.http.ContentType

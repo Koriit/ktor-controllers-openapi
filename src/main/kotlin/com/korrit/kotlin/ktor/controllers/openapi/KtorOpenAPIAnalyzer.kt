@@ -1,4 +1,4 @@
-package korrit.kotlin.ktor.controllers.openapi
+package com.korrit.kotlin.ktor.controllers.openapi
 
 import com.korrit.kotlin.ktor.controllers.HttpHeader
 import com.korrit.kotlin.ktor.controllers.Input
@@ -7,6 +7,7 @@ import com.korrit.kotlin.ktor.controllers.ResponsesKey
 import com.korrit.kotlin.ktor.controllers.delegates.HeaderParamDelegate
 import com.korrit.kotlin.ktor.controllers.delegates.PathParamDelegate
 import com.korrit.kotlin.ktor.controllers.delegates.QueryParamDelegate
+import com.korrit.kotlin.ktor.controllers.openapi.exceptions.AnalysisException
 import com.korrit.kotlin.ktor.controllers.patch.AbstractPatchDelegate
 import com.korrit.kotlin.ktor.controllers.patch.PatchOf
 import com.korrit.kotlin.ktor.controllers.patch.RequiredNestedPatchDelegate
@@ -30,7 +31,6 @@ import io.ktor.http.content.OutgoingContent.NoContent
 import io.ktor.routing.HttpMethodRouteSelector
 import io.ktor.routing.Route
 import io.ktor.routing.Routing
-import korrit.kotlin.ktor.controllers.openapi.exceptions.AnalysisException
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.OffsetTime

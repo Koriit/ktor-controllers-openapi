@@ -7,6 +7,8 @@ image:https://img.shields.io/badge/code%20style-%E2%9D%A4-FF4081.svg[ktlint,link
 image:https://img.shields.io/maven-central/v/com.koriit.kotlin/ktor-controllers-openapi.svg?label=Maven%20Central[Maven Central, link="https://search.maven.org/search?q=g:%22com.koriit.kotlin%22%20AND%20a:%22ktor-controllers-openapi%22"]
 image:https://img.shields.io/github/license/koriit/ktor-controllers-openapi[GitHub]
 
+WARNING: From version 0.5.0 all package names have been renamed to match new artifact group id.
+
 Support for OpenAPI3 in https://github.com/Koriit/ktor-controllers[ktor-controllers].
 
 The idea is to validate your OpenAPI spec against your code instead of generating it from your code.
