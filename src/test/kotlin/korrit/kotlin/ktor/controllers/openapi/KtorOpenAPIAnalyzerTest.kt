@@ -1,5 +1,20 @@
 package korrit.kotlin.ktor.controllers.openapi
 
+import com.korrit.kotlin.ktor.controllers.EmptyBodyInput
+import com.korrit.kotlin.ktor.controllers.GET
+import com.korrit.kotlin.ktor.controllers.HttpHeader
+import com.korrit.kotlin.ktor.controllers.Input
+import com.korrit.kotlin.ktor.controllers.PATCH
+import com.korrit.kotlin.ktor.controllers.POST
+import com.korrit.kotlin.ktor.controllers.PUT
+import com.korrit.kotlin.ktor.controllers.errors
+import com.korrit.kotlin.ktor.controllers.patch.PatchOf
+import com.korrit.kotlin.ktor.controllers.path
+import com.korrit.kotlin.ktor.controllers.query
+import com.korrit.kotlin.ktor.controllers.responds
+import com.korrit.kotlin.openapi.OpenAPIMatcher
+import com.korrit.kotlin.openapi.OpenAPIReader
+import com.korrit.kotlin.openapi.model.OpenAPI
 import io.ktor.application.ApplicationCall
 import io.ktor.http.HttpHeaders.Location
 import io.ktor.http.HttpStatusCode
@@ -11,27 +26,12 @@ import io.ktor.routing.routing
 import io.ktor.server.engine.applicationEngineEnvironment
 import io.ktor.server.testing.TestApplicationEngine
 import io.ktor.util.pipeline.PipelineContext
-import korrit.kotlin.ktor.controllers.EmptyBodyInput
-import korrit.kotlin.ktor.controllers.GET
-import korrit.kotlin.ktor.controllers.HttpHeader
-import korrit.kotlin.ktor.controllers.Input
-import korrit.kotlin.ktor.controllers.PATCH
-import korrit.kotlin.ktor.controllers.POST
-import korrit.kotlin.ktor.controllers.PUT
-import korrit.kotlin.ktor.controllers.errors
-import korrit.kotlin.ktor.controllers.patch.PatchOf
-import korrit.kotlin.ktor.controllers.path
-import korrit.kotlin.ktor.controllers.query
-import korrit.kotlin.ktor.controllers.responds
-import korrit.kotlin.openapi.OpenAPIMatcher
-import korrit.kotlin.openapi.OpenAPIReader
-import korrit.kotlin.openapi.model.OpenAPI
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.fail
 
 internal class KtorOpenAPIAnalyzerTest {
 
-    @Suppress("unused")
+    @Suppress("LongMethod")
     @Test
     fun testAnalysis() {
         data class Entity(
@@ -96,7 +96,7 @@ internal class KtorOpenAPIAnalyzerTest {
                                         id:
                                           type: integer
                                           format: int64
-                          """.trimIndent(),
+                """.trimIndent(),
                 // </editor-fold>
                 route = {
                     GET("/") {
@@ -139,7 +139,7 @@ internal class KtorOpenAPIAnalyzerTest {
                                     format: int64
                         "404":  
                           description: Not Found
-                          """.trimIndent(),
+                """.trimIndent(),
                 // </editor-fold>
                 route = {
                     GET("/{id}") {
@@ -181,7 +181,7 @@ internal class KtorOpenAPIAnalyzerTest {
                                     format: int64
                         "404":  
                           description: Not Found
-                          """.trimIndent(),
+                """.trimIndent(),
                 // </editor-fold>
                 route = {
                     GET("/code={entityCode}") {
@@ -224,7 +224,7 @@ internal class KtorOpenAPIAnalyzerTest {
                                 type: string
                         "400":  
                           description: Bad Request
-                          """.trimIndent(),
+                """.trimIndent(),
                 // </editor-fold>
                 route = {
                     POST("/") {
@@ -267,7 +267,7 @@ internal class KtorOpenAPIAnalyzerTest {
                           description: OK
                         "400":  
                           description: Bad Request
-                          """.trimIndent(),
+                """.trimIndent(),
                 // </editor-fold>
                 route = {
                     PUT("/{id}") {
@@ -312,7 +312,7 @@ internal class KtorOpenAPIAnalyzerTest {
                           description: OK
                         "400":  
                           description: Bad Request
-                          """.trimIndent(),
+                """.trimIndent(),
                 // </editor-fold>
                 route = {
                     PUT("/{id}") {
@@ -357,7 +357,7 @@ internal class KtorOpenAPIAnalyzerTest {
                           description: OK
                         "400":  
                           description: Bad Request
-                          """.trimIndent(),
+                """.trimIndent(),
                 // </editor-fold>
                 route = {
                     PATCH("/{id}") {
@@ -372,11 +372,13 @@ internal class KtorOpenAPIAnalyzerTest {
                 }
             )
         ).testCases {
-            val server = TestApplicationEngine(applicationEngineEnvironment {
-                module {
-                    routing(route)
+            val server = TestApplicationEngine(
+                applicationEngineEnvironment {
+                    module {
+                        routing(route)
+                    }
                 }
-            })
+            )
             server.start()
             val analyzer = KtorOpenAPIAnalyzer(
                 ktor = server.application

@@ -3,14 +3,14 @@
 /////////////
 
 plugins {
-    id "org.jetbrains.kotlin.jvm" version "1.3.72"
+    id "org.jetbrains.kotlin.jvm" version "1.6.10"
     id "java-library"
     id "maven-publish"
     id "signing"
     id "jacoco"
-    id "org.jlleitschuh.gradle.ktlint" version "9.2.1"
-    id "io.gitlab.arturbosch.detekt" version "1.7.4"
-    id "com.github.ben-manes.versions" version "0.28.0"
+    id "org.jlleitschuh.gradle.ktlint" version "10.2.1"
+    id "io.gitlab.arturbosch.detekt" version "1.19.0"
+    id "com.github.ben-manes.versions" version "0.41.0"
 }
 
 //////////////////
@@ -19,11 +19,10 @@ plugins {
 
 repositories {
     mavenCentral()
-    jcenter()
 }
 
 ext {
-    ktorVersion = "1.3.2"
+    ktorVersion = "1.6.7"
 }
 
 dependencies {
@@ -32,18 +31,18 @@ dependencies {
     implementation "org.jetbrains.kotlin:kotlin-reflect"
 
     // KTOR
-    implementation "com.koriit.kotlin:ktor-controllers:0.6.0"
+    implementation "com.koriit.kotlin:ktor-controllers:0.7.0"
     implementation "io.ktor:ktor-server-core:$ktorVersion"
     implementation "io.ktor:ktor-server-host-common:$ktorVersion"
 
     // OpenAPI
     // the matcher part of this library is only for test use
     // the matcher dependencies should not be included at all times
-    compileOnly "com.koriit.kotlin:openapi-matcher:0.6.3"
-    testImplementation "com.koriit.kotlin:openapi-matcher:0.6.3"
+    compileOnly "com.koriit.kotlin:openapi-matcher:0.7.0"
+    testImplementation "com.koriit.kotlin:openapi-matcher:0.7.0"
 
     // TESTING
-    testImplementation "org.junit.jupiter:junit-jupiter:5.6.1"
+    testImplementation "org.junit.jupiter:junit-jupiter:5.8.2"
     testImplementation "io.ktor:ktor-server-test-host:$ktorVersion"
 }
 
@@ -84,8 +83,7 @@ compileKotlin {
 compileTestKotlin {
     kotlinOptions {
         freeCompilerArgs += compilerArgs + [
-                "-Xuse-experimental=io.ktor.util.KtorExperimentalAPI",
-                "-Xuse-experimental=kotlin.ExperimentalStdlibApi"
+                "-Xopt-in=kotlin.ExperimentalStdlibApi"
         ]
         jvmTarget = "$targetCompatibility"
     }
@@ -96,7 +94,7 @@ compileTestKotlin {
 //////////
 
 ktlint {
-    version = "0.36.0"
+    version = "0.43.2"
     verbose = true
 }
 
@@ -112,7 +110,7 @@ test {
 }
 
 jacoco {
-    toolVersion = "0.8.4"
+    toolVersion = "0.8.7"
 }
 
 if (!hasProperty("fast")) test.finalizedBy(jacocoTestReport)

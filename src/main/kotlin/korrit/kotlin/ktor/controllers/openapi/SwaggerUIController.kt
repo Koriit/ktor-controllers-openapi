@@ -9,20 +9,18 @@ import io.ktor.routing.Route
 import io.ktor.routing.application
 import io.ktor.routing.get
 import io.ktor.server.engine.ApplicationEngineEnvironment
-import io.ktor.util.KtorExperimentalAPI
 
 /**
  * Serves Swagger UI under GET /swagger-ui.
  *
  * Also redirects /swagger-ui.html to /swagger-ui
  */
-@KtorExperimentalAPI
 fun Route.swaggerUIController() {
     with(application.environment) {
         if (this is ApplicationEngineEnvironment) {
             val basePath = if (rootPath != "/") rootPath else ""
             connectors.forEach {
-                log.info("Serving SwaggerUI at ${it.type.name.toLowerCase()}://${it.host}:${it.port}$basePath/swagger-ui")
+                log.info("Serving SwaggerUI at ${it.type.name.lowercase()}://${it.host}:${it.port}$basePath/swagger-ui")
             }
         }
     }

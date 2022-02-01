@@ -1,5 +1,26 @@
 package korrit.kotlin.ktor.controllers.openapi
 
+import com.korrit.kotlin.ktor.controllers.HttpHeader
+import com.korrit.kotlin.ktor.controllers.Input
+import com.korrit.kotlin.ktor.controllers.InputKey
+import com.korrit.kotlin.ktor.controllers.ResponsesKey
+import com.korrit.kotlin.ktor.controllers.delegates.HeaderParamDelegate
+import com.korrit.kotlin.ktor.controllers.delegates.PathParamDelegate
+import com.korrit.kotlin.ktor.controllers.delegates.QueryParamDelegate
+import com.korrit.kotlin.ktor.controllers.patch.AbstractPatchDelegate
+import com.korrit.kotlin.ktor.controllers.patch.PatchOf
+import com.korrit.kotlin.ktor.controllers.patch.RequiredNestedPatchDelegate
+import com.korrit.kotlin.ktor.controllers.patch.RequiredPatchDelegate
+import com.korrit.kotlin.openapi.model.Header
+import com.korrit.kotlin.openapi.model.MediaType
+import com.korrit.kotlin.openapi.model.OpenAPI
+import com.korrit.kotlin.openapi.model.Operation
+import com.korrit.kotlin.openapi.model.Parameter
+import com.korrit.kotlin.openapi.model.Path
+import com.korrit.kotlin.openapi.model.Property
+import com.korrit.kotlin.openapi.model.RequestBody
+import com.korrit.kotlin.openapi.model.Response
+import com.korrit.kotlin.openapi.model.Schema
 import io.ktor.application.Application
 import io.ktor.application.feature
 import io.ktor.http.ContentType
@@ -9,32 +30,10 @@ import io.ktor.http.content.OutgoingContent.NoContent
 import io.ktor.routing.HttpMethodRouteSelector
 import io.ktor.routing.Route
 import io.ktor.routing.Routing
-import io.ktor.util.KtorExperimentalAPI
+import korrit.kotlin.ktor.controllers.openapi.exceptions.AnalysisException
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.OffsetTime
-import korrit.kotlin.ktor.controllers.HttpHeader
-import korrit.kotlin.ktor.controllers.Input
-import korrit.kotlin.ktor.controllers.InputKey
-import korrit.kotlin.ktor.controllers.ResponsesKey
-import korrit.kotlin.ktor.controllers.delegates.HeaderParamDelegate
-import korrit.kotlin.ktor.controllers.delegates.PathParamDelegate
-import korrit.kotlin.ktor.controllers.delegates.QueryParamDelegate
-import korrit.kotlin.ktor.controllers.openapi.exceptions.AnalysisException
-import korrit.kotlin.ktor.controllers.patch.AbstractPatchDelegate
-import korrit.kotlin.ktor.controllers.patch.PatchOf
-import korrit.kotlin.ktor.controllers.patch.RequiredNestedPatchDelegate
-import korrit.kotlin.ktor.controllers.patch.RequiredPatchDelegate
-import korrit.kotlin.openapi.model.Header
-import korrit.kotlin.openapi.model.MediaType
-import korrit.kotlin.openapi.model.OpenAPI
-import korrit.kotlin.openapi.model.Operation
-import korrit.kotlin.openapi.model.Parameter
-import korrit.kotlin.openapi.model.Path
-import korrit.kotlin.openapi.model.Property
-import korrit.kotlin.openapi.model.RequestBody
-import korrit.kotlin.openapi.model.Response
-import korrit.kotlin.openapi.model.Schema
 import kotlin.reflect.KClass
 import kotlin.reflect.KProperty1
 import kotlin.reflect.KType
@@ -59,7 +58,6 @@ import kotlin.reflect.jvm.javaField
  * @property defaultContentType implicit content type
  * @property defaultErrorType implicit type of error responses
  */
-@KtorExperimentalAPI
 @ExperimentalStdlibApi
 @Suppress("TooManyFunctions") // all those functions are open to allow overriding
 open class KtorOpenAPIAnalyzer(
@@ -77,7 +75,10 @@ open class KtorOpenAPIAnalyzer(
      *
      * @throws AnalysisException in case of any failure
      */
-    @Suppress("TooGenericExceptionCaught") // Intended
+    @Suppress(
+        "TooGenericExceptionCaught", // Intended
+        "RethrowCaughtException" // FIXME, possible false-positive of detekt
+    )
     open fun analyze(): OpenAPI {
         try {
             routes = mutableMapOf()
@@ -125,14 +126,14 @@ open class KtorOpenAPIAnalyzer(
     }
 
     protected open fun analyzeMethod(route: Route): String {
-        return (route.selector as HttpMethodRouteSelector).method.value.toLowerCase()
+        return (route.selector as HttpMethodRouteSelector).method.value.lowercase()
     }
 
     protected open fun analyzeInput(route: Route): Triple<Boolean, List<Parameter>?, RequestBody?> {
         val inputProvider = route.attributes.getOrNull(InputKey) ?: return Triple(false, null, null)
         val input = inputProvider()
 
-        val httpMethod = HttpMethod.parse(analyzeMethod(route).toUpperCase())
+        val httpMethod = HttpMethod.parse(analyzeMethod(route).uppercase())
 
         // deprecated
         val deprecated = input._deprecated
@@ -198,7 +199,7 @@ open class KtorOpenAPIAnalyzer(
     protected open fun analyzeResponses(route: Route, path: String): List<Response> {
         val responseTypes = route.attributes.getOrNull(ResponsesKey) ?: throw AnalysisException("There are no responses declared for path: $path")
 
-        val httpMethod = HttpMethod.parse(analyzeMethod(route).toUpperCase())
+        val httpMethod = HttpMethod.parse(analyzeMethod(route).uppercase())
 
         return responseTypes.map { response ->
             var content: List<MediaType>? = null
