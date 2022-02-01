@@ -1,10 +1,10 @@
 = Ktor Controllers OpenAPI
 
-image:https://www.travis-ci.org/Koriit/ktor-controllers-openapi.svg?branch=master["Build Status", link="https://www.travis-ci.org/Koriit/ktor-controllers-openapi"]
+image:https://github.com/Koriit/ktor-controllers-openapi/actions/workflows/build.yaml/badge.svg[Build, link="https://github.com/Koriit/ktor-controllers-openapi/actions/workflows/build.yaml"]
 image:https://www.codefactor.io/repository/github/koriit/ktor-controllers-openapi/badge[CodeFactor,link=https://www.codefactor.io/repository/github/koriit/ktor-controllers-openapi]
 image:https://img.shields.io/badge/code%20style-%E2%9D%A4-FF4081.svg[ktlint,link=https://ktlint.github.io/]
 
-image:https://api.bintray.com/packages/koriit/kotlin/ktor-controllers-openapi/images/download.svg[Download, link=https://bintray.com/koriit/kotlin/ktor-controllers-openapi/_latestVersion]
+image:https://img.shields.io/maven-central/v/com.koriit.kotlin/ktor-controllers-openapi.svg?label=Maven%20Central[Maven Central, link="https://search.maven.org/search?q=g:%22com.koriit.kotlin%22%20AND%20a:%22ktor-controllers-openapi%22"]
 image:https://img.shields.io/github/license/koriit/ktor-controllers-openapi[GitHub]
 
 Support for OpenAPI3 in https://github.com/Koriit/ktor-controllers[ktor-controllers].
